@@ -1,0 +1,35 @@
+   order  departNumber  goodsCode        barCode  count   cost   nds  ndsSum  discountValue  costWithDiscount  amount                     dateCommit  insertType  plugin-property
+0      1             1     173016       46226907    2.0  24.66  20.0    6.63           9.52              19.9    39.8  2025-04-29T06:48:13.229+07:00           0              NaN
+1      2             1     111870  1000001118703    1.0  58.71  10.0    4.52           9.01              49.7    49.7  2025-04-29T06:48:26.587+07:00           1              NaN 
+   tabNumber                           userName  operationType cashOperation           operDay  shop  cash  ...        payments   discountCards card exciseBottles  storno  returndayinday  original-purchase
+0    к24919  Самойленко Василиса Брониславовна           True        INCOME  2025-04-29+07:00     2     9  ...  \n              \n              NaN          None     NaN             NaN                NaN
+1    к24919  Самойленко Василиса Брониславовна           True        INCOME  2025-04-29+07:00     2     9  ...  \n              \n              NaN          None     NaN             NaN                NaN
+
+[2 rows x 27 columns] 
+    order                typeClass  amount       description  plugin-property
+0      0  CashChangePaymentEntity  4910.5               NaN              NaN
+1      0        CashPaymentEntity  5000.0  Оплата наличными              NaN
+
+
+
+Данные из key = purchases
+tabNumber
+operDay
+shop
+cash
+shift
+number
+amount
+discountAmount
+fiscalDocNum
+ 
+Данные key=position
+0   order             14636 non-null  int64
+2   goodsCode         14636 non-null  int64
+4   count             14636 non-null  float64
+5   cost              14636 non-null  float64
+8   discountValue     14636 non-null  float64
+9   costWithDiscount  14636 non-null  float64
+10  amount            14636 non-null  float64
+
+
