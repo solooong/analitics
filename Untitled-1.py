@@ -62,31 +62,24 @@ merged = final_df.merge(
     how='left',
     on=key_fields)
 
-# 1. Дополнительная агрегация по ['shop', 'operDay']
+# # 1. Дополнительная агрегация по ['shop', 'operDay']
 
-# 2. Основная агрегация по ['AdvertActExternalCode', 'shop', 'operDay', 'goodsCode']
-agg_main = merged.groupby(['AdvertActExternalCode', 'shop', 'operDay', 'goodsCode']).agg(
-    Chekov_s_tovarom_vsego=('fiscalDocNum', 'size'),
-    Vsego_tovarov_shtuk=('quantity', 'sum'),
-    TO_po_tovaru=('amount', 'sum')).reset_index()
+# # 2. Основная агрегация по ['AdvertActExternalCode', 'shop', 'operDay', 'goodsCode']
+# agg_main = merged.groupby(['AdvertActExternalCode', 'shop', 'cash', 'shift', 'number', 'operDay', 'goodsCode']).agg(
+#     Chekov_s_tovarom_vsego=('fiscalDocNum', 'size'),
+#     Vsego_tovarov_shtuk=('quantity', 'sum'),
+#     TO_po_tovaru=('amount', 'sum')).reset_index()
 
-# Для расчёта долей в дальнейшем!!!!
-agg_extra_TO = merged.groupby(['shop' ,'operDay']).agg(
-    vsego_chekov=('fiscalDocNum', 'size'), TO_itogo_shop=('amount_inogo', 'sum')
-).reset_index()
-# считаем ТО по товару
-agg_extra_disc=merged.groupby(['AdvertActExternalCode']).agg(summa_TO_akcii=('amount', 'sum'), chekov_akcii=('fiscalDocNum', 'size')).reset_index()
+# # Для расчёта долей в дальнейшем!!!!
+# agg_extra_TO = merged.groupby(['shop', 'cash', 'shift', 'number','operDay']).agg(
+#     vsego_chekov=('fiscalDocNum', 'size'), TO_itogo_shop=('amount_inogo', 'sum')
+# ).reset_index()
+# # считаем ТО по товару
+# agg_extra_disc=merged.groupby(['AdvertActExternalCode', 'shop','cash', 'shift', 'number', 'operDay']).agg(summa_TO_akcii=('amount', 'sum'), chekov_akcii=('fiscalDocNum', 'size')).reset_index()
 
-df = agg_main.merge(agg_extra_TO, how='left', on=['shop', 'operDay'])
-df = df.merge(agg_extra_disc, how='left', on='AdvertActExternalCode')
-df['share_akcii'] = df['chekov_akcii'] / df['Chekov_s_tovarom_vsego'] 
-df['ratio_TO_disc'] = df['TO_po_tovaru'] / df['summa_TO_akcii'] 
-finally_df = df[[
-    'AdvertActExternalCode', 'shop', 'operDay', 'goodsCode',
-    'Chekov_s_tovarom_vsego', 'vsego_chekov', 'chekov_akcii',
-    'TO_po_tovaru', 'TO_itogo_shop', 'summa_TO_akcii',
-     'share_akcii', 'ratio_TO_disc'
-]]
+# df = agg_main.merge(agg_extra_TO, how='left', on=['shop','cash', 'shift', 'number', 'operDay'])
+# df = df.merge(agg_extra_disc, how='left', on=['shop','cash', 'shift', 'number', 'operDay'])
+# df['share_akcii'] = df['chekov_akcii'] / df['Chekov_s_tovarom_vsego'] 
 
 
 #  --- 5. Сохраняем результат ---
