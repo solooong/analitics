@@ -6,14 +6,20 @@ tree = ET.parse('b02_purchases_2025_04_29_return_value.xml')
 root = tree.getroot()
 
 sales_rows = []
+# Список ключей для чтения из purchase
+keys = ['operDay', 'shop', 'cash', 'shift', 'number', 'amount', 'discountAmount', 'fiscalDocNum']
+# Сопоставление для переименования
+rename_map = {'amount': 'amount_inogo'}
+
 for purchase in root.findall('.//purchase'):
-    purchase_data = {key: purchase.attrib.get(key) for key in [
-        'tabNumber', 'operDay', 'shop', 'cash', 'shift', 'number', 'amount', 'discountAmount', 'fiscalDocNum'
-    ]}
-    # Добавим позиции
+    purchase_data = {}
+    for key in keys:
+        value = purchase.attrib.get(key)
+        new_key = rename_map.get(key, key)
+        purchase_data[new_key] = value
+
     for pos in purchase.findall('.//position'):
         pos_data = pos.attrib.copy()
-        # Добавим fiscalDocNum и purchase info к позиции
         row = purchase_data.copy()
         row.update(pos_data)
         sales_rows.append(row)
@@ -37,11 +43,13 @@ for purchase in root2.findall('.//purchase'):
 
 final_df_disc = pd.DataFrame(discount_rows)
 final_df_disc.rename(columns={'saletime': 'operDay', 'goodCode': 'goodsCode'}, inplace=True)
-
+if 'amount' in final_df_disc.columns:
+    final_df_disc.drop(columns=['amount'], inplace=True)
 # --- 3. Преобразуем типы ---
 for df in [final_df, final_df_disc]:
     # Дата
-    df['operDay'] = pd.to_datetime(df['operDay'], errors='coerce').dt.strftime('%d:%m:%Y')
+    df['operDay'] = pd.to_datetime(df['operDay'], errors='coerce').dt.strftime('%d-%m-%Y')
+
     # Числовые поля
     for col in ['shop', 'cash', 'shift', 'number', 'goodsCode']:
         if col in df.columns:
@@ -52,10 +60,14 @@ key_fields = ['operDay', 'shop', 'cash', 'shift', 'number', 'goodsCode']
 merged = final_df.merge(
     final_df_disc,
     how='left',
-    on=key_fields,
-    suffixes=('', '_disc')
-)
-
+    on=key_fields)
+finally_df=(merged.groupby(['AdvertActExternalCode', 'shop',
+                             'operDay', 'goodsCode'])).agg(
+                                 Chekov_s_tovarom_vsego = ('fiscalDocNum','count'),
+                                 Vsego_tovarov_shtuk = ('count', 'sum'),
+                                 TO_po_tovaru = ('amount', 'sum'),
+                                 TO_itogo = ('amount_inogo', 'sum'))
 # --- 5. Сохраняем результат ---
 merged.to_excel('finality.xlsx', index=False)
-print('Done! Итоговый файл: finality.xlsx')
+finally_df.to_excel('agg.xlsx', index=False)
+print('Итоговый файл: finality.xlsx')
