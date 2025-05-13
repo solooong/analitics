@@ -9,15 +9,14 @@ sales_rows = []
 # Список ключей для чтения из purchase
 keys = ['operDay', 'shop', 'cash', 'shift', 'number', 'amount', 'discountAmount', 'fiscalDocNum']
 # Сопоставление для переименования
-rename_map = {'amount': 'amount_inogo'}
+rename_map = {'amount': 'amount_itogo'}
 
 for purchase in root.findall('.//purchase'):
     purchase_data = {}
     for key in keys:
         value = purchase.attrib.get(key)
         new_key = rename_map.get(key, key)
-        purchase_data[new_key] = value
-
+        purchase_data[new_key] = value 
     for pos in purchase.findall('.//position'):
         pos_data = pos.attrib.copy()
         row = purchase_data.copy()
@@ -51,7 +50,7 @@ for df in [final_df, final_df_disc]:
     df['operDay'] = df['operDay'].str[:10]  # Обрезаем до первых 10 символов
     df['operDay'] = pd.to_datetime(df['operDay'], errors='coerce').dt.strftime('%d-%m-%Y')
     # Числовые поля
-    for col in ['shop', 'cash', 'shift', 'number', 'goodsCode', 'quantity', 'amount', 'amount_inogo']:
+    for col in ['shop', 'cash', 'shift', 'number', 'goodsCode', 'quantity', 'amount', 'amount_itogo']:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').astype('float')
 
@@ -61,8 +60,12 @@ merged = final_df.merge(
     final_df_disc,
     how='left',
     on=key_fields)
+total_amount_per_doc = merged.groupby('fiscalDocNum')['amount_itogo'].sum()
+print(total_amount_per_doc)
 
+breakpoint()
 # # 1. Дополнительная агрегация по ['shop', 'operDay']
+
 
 # # 2. Основная агрегация по ['AdvertActExternalCode', 'shop', 'operDay', 'goodsCode']
 # agg_main = merged.groupby(['AdvertActExternalCode', 'shop', 'cash', 'shift', 'number', 'operDay', 'goodsCode']).agg(
@@ -72,7 +75,7 @@ merged = final_df.merge(
 
 # # Для расчёта долей в дальнейшем!!!!
 # agg_extra_TO = merged.groupby(['shop', 'cash', 'shift', 'number','operDay']).agg(
-#     vsego_chekov=('fiscalDocNum', 'size'), TO_itogo_shop=('amount_inogo', 'sum')
+#     vsego_chekov=('fiscalDocNum', 'size'), TO_itogo_shop=('amount_itogo', 'sum')
 # ).reset_index()
 # # считаем ТО по товару
 # agg_extra_disc=merged.groupby(['AdvertActExternalCode', 'shop','cash', 'shift', 'number', 'operDay']).agg(summa_TO_akcii=('amount', 'sum'), chekov_akcii=('fiscalDocNum', 'size')).reset_index()
