@@ -10,6 +10,7 @@ def parser_xml():
     keys = ['operDay', 'shop', 'cash', 'shift', 'number', 'amount', 'discountAmount', 'fiscalDocNum', 'order', 'AdvertActExternalCode']
     # Сопоставление для переименования
     rename_map = {'amount': 'amount_itogo'}
+    print('Обработка общих продаж')
     for purchase in root.findall('.//purchase'):
         purchase_data = {}
         for key in keys:
@@ -23,6 +24,8 @@ def parser_xml():
             sales_rows.append(row)
     final_df = pd.DataFrame(sales_rows)
     # --- 2. Парсим скидки ---
+    print('Обработка продаж включающие скидки на товары')
+
     tree2 = ET.parse('b02_loy_2025_04_29_return_value.xml')
     root2 = tree2.getroot()
     discount_rows = []
@@ -42,6 +45,8 @@ def parser_xml():
     if 'amount' in final_df_disc.columns:
         final_df_disc.drop(columns=['amount'], inplace=True)
     # --- 3. Преобразуем типы ---
+    print('Корректируем данные в ячейках')
+
     for df in [final_df, final_df_disc]:
         # Дата
         df['operDay'] = df['operDay'].str[:10]  # Обрезаем до первых 10 символов
@@ -51,6 +56,7 @@ def parser_xml():
                     ,'discountAmount','count','cost','nds','ndsSum','discountValue','costWithDiscount']:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').astype('float')
+    print('Объеденяем данные в один DataFrame')
 
     # --- 4. Объединяем по ключам ---
     key_fields = ['operDay', 'shop', 'cash', 'shift', 'number', 'goodsCode', 'order']
@@ -66,7 +72,10 @@ def parser_xml():
 
 # Чистим базу от лишних данных. Переименовываем столбцы для корректного отображения
 def clean_df(clean):
+    print('Чистим базу от лишних данных. ')
     key_collum_for_drop = ['shift','number','order','departNumber','barCode','nds','ndsSum','dateCommit','insertType', 'AdvertActGUID', 'card-number', 'advertType', 'quantity', 'barCode']
+    
+    print('Переименовываем столбцы для корректного отображения')
     dictonary={'operDay':'Дата','shop':'Магазин','cash':'Касса',
                'shift':'Смена','number':'Номер чека','amount_itogo':'Сумма чека',
                'discountAmount':'Сумма скидки чека','fiscalDocNum':'Номер документа',
@@ -80,29 +89,63 @@ def clean_df(clean):
     clean_df.drop(columns=key_collum_for_drop, inplace=True)
     # Rename columns
     clean_df.rename(columns=dictonary, inplace=True)
-    
+    print('Меняем местами столобцы для большего удобства')
     clean_df.to_excel('format_finality.xlsx', index=False)
+    print('Итоговый файл: format_finality.xlsx')   
     return clean_df
 
-def analitics_colums(analiz):
-    analitic_df=pd.DataFrame(analiz)
-    first_result=analitic_df.drop_duplicates(subset='fiscalDocNum', keep='first').reset_index() #определяем первое вхождение документа
-    amount_shop_summ=first_result['amount_itogo'].sum() #считаем общий ТО
-    chekov_shop_itogo=first_result['amount_itogo'].count() #считаем сколько чеков всего
-    discount_amount=analitic_df.groupby('AdvertActExternalCode', 'fiscalDocNum')['goodsCode'].count()  #чеков с товаром акции
+def analitics_colums(df):
+    df = pd.read_excel('test_for_analiz.xlsx')
+    # Фильтруем только строки со скидкой
+    df_discounted = df[df['isDiscountPurchase']==True].copy()
+    # Аналитика по каждому товару в акции
+    sales_of_item = (
+        df_discounted.groupby(['shop', 'operDay', 'AdvertActExternalCode', 'fiscalDocNum', 'goodsCode'])
+        .agg(
+            sum_of_item=('amount', 'sum'),
+            vsego_chevok_item=('fiscalDocNum', 'count')
+        )
+        .reset_index()
+    )
+    # Аналитика по чекам с акцией (без разделения по товарам)
+    sales_of_discount = (
+        df_discounted.groupby(['shop', 'operDay', 'AdvertActExternalCode', 'fiscalDocNum'])
+        .agg(
+            sum_of_discount=('amount', 'sum'),
+            vsego_chekov_discount=('fiscalDocNum', 'count')
+        )
+        .reset_index()
+    )
+    # Общая аналитика по магазинам и датам (по чекам)
+    sales_of_shop = (
+        df.drop_duplicates(subset='fiscalDocNum', keep='first')
+        .groupby(['shop', 'operDay'])
+        .agg(
+            sum_of_sale_shop=('amount_itogo', 'sum'),
+            vsego_chekov_shop=('fiscalDocNum', 'count')
+        )
+        .reset_index()
+    )
+    # Merge: объединяем всё обратно в исходный DataFrame
+    keys_item = ['shop', 'operDay', 'AdvertActExternalCode', 'fiscalDocNum', 'goodsCode']
+    keys_discount = ['shop', 'operDay', 'AdvertActExternalCode', 'fiscalDocNum']
+    df = df.merge(sales_of_item, how='left', on=keys_item)
+    df = df.merge(sales_of_discount, how='left', on=keys_discount)
+    df = df.merge(sales_of_shop, how='left', on=['shop', 'operDay'])
+    return df
+    # Указать обязательно информацию о количестве акций в данный период и количестве товара в акции
 
 
+# def math_of_colum():#  Тут расчитываем показатели вхождения 
 
 def main():
-    breakpoint()
-# # 1. Дополнительная агрегация по ['shop', 'operDay']
+   
+    original_df=parser_xml()
+    analiz_df=analitics_colums(original_df)
+    df_cleaned_final = clean_df(analiz_df)
+    
 
-
-# # 2. Основная агрегация по ['AdvertActExternalCode', 'shop', 'operDay', 'goodsCode']
-# agg_main = merged.groupby(['AdvertActExternalCode', 'shop', 'cash', 'shift', 'number', 'operDay', 'goodsCode']).agg(
-#     Chekov_s_tovarom_vsego=('fiscalDocNum', 'size'),
-#     Vsego_tovarov_shtuk=('quantity', 'sum'),
-#     TO_po_tovaru=('amount', 'sum')).reset_index()
+analitics_colums()
 
 # # Для расчёта долей в дальнейшем!!!!
 # agg_extra_TO =111111111110 merged.groupby(['shop', 'cash', 'shift', 'number','operDay']).agg(
@@ -117,5 +160,3 @@ def main():
 
 
 
-original_df=parser_xml()
-df_cleaned = clean_df(original_df)
