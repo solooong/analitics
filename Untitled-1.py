@@ -8,14 +8,16 @@ import os
 import gspread
 from google.oauth2.service_account import Credentials
 import xml.etree.ElementTree as ET
+from lxml import etree
 
 def parser_xml():
     # --- 1. Парсим продажи ---
-    tree = ET.parse('b02_purchases_2025_04_29_return_value.xml')
+    parser = etree.XMLParser(recover=True)
+    tree = etree.parse('b02_purchases_2025_04_29_return_value.xml', parser)
     root = tree.getroot()
     sales_rows = []
     # Список ключей для чтения из purchase
-    keys = ['operDay', 'shop', 'cash', 'shift', 'number', 'amount', 'discountAmount', 'fiscalDocNum', 'order', 'AdvertActExternalCode']
+    keys = ['operDay', 'shop', 'cash', 'shift', 'number', 'amount', 'discountAmount', 'fiscalDocNum', 'order']
     # Сопоставление для переименования
     rename_map = {'amount': 'amount_itogo'}
     print('Обработка общих продаж')
@@ -25,8 +27,8 @@ def parser_xml():
             value = purchase.attrib.get(key)
             new_key = rename_map.get(key, key)
             purchase_data[new_key] = value 
-        for pos in purchase.findall('.//position'):
-            pos_data = pos.attrib.copy()
+        for pos in purchase.findall('.//positions/position'):
+            pos_data = dict(pos.attrib)
             row = purchase_data.copy()
             row.update(pos_data)
             sales_rows.append(row)
@@ -42,7 +44,7 @@ def parser_xml():
             'shop', 'cash', 'shift', 'number', 'saletime'
         ]}
         for disc in purchase.findall('.//discount'):
-            disc_data = disc.attrib.copy()
+            disc_data = dict(disc.attrib)
             row = purchase_data.copy()
             row.update(disc_data)
             discount_rows.append(row)
@@ -86,7 +88,8 @@ def clean_df(clean):
                            'shift','number','order',
                            'departNumber','barCode','nds','ndsSum',
                            'dateCommit','insertType',
-                             'AdvertActGUID', 'card-number', 'advertType', 'quantity', 'barCode']
+                             'AdvertActGUID', 'card-number', 'advertType', 'quantity', 'barCode',
+                             'isDiscountPurchase', 'AdvertActDiscountType']
     
     print('Переименовываем столбцы для корректного отображения')
     dictonary={'operDay':'Дата','shop':'Магазин','cash':'Касса',
@@ -96,47 +99,43 @@ def clean_df(clean):
                'count':'Количество товара','cost':'Цена товара','nds':'НДС','ndsSum':'Сумма НДС',
                'discountValue':'Размер скидки на товар','costWithDiscount':
                'Цена товара со скидкой','amount':'Сумма на товар со скидкой', 
-               'Номер журнала МА': 'AdvertActExternalCode',
-              'Итого сумма скидки, руб':' itogo_discount_item',
-                'Количество проданного товара, шт': 'kolichesytvo_tovara',
-                'Итого продаж товара, руб':'sum_of_item',
-                'Итого чеков товара, шт':'vsego_chevok_item',
-                'Итого продаж акции,руб':'sum_of_discount',
-                'Итого чеков акции, шт':'vsego_chekov_discount',
-                'Итого продаж магазина,руб':'sum_of_sale_shop',
+               'AdvertActExternalCode':'Номер журнала МА' ,
+              ' itogo_discount_item':'Итого сумма скидки, руб',
+                 'kolichesytvo_tovara':'Количество проданного товара, шт',
+                'sum_of_item':'Итого продаж товара, руб',
+                'vsego_chevok_item':'Итого чеков товара, шт',
+                'sum_of_discount':'Итого продаж акции,руб',
+                'vsego_chekov_discount':'Итого чеков акции, шт',
+                'sum_of_sale_shop':'Итого продаж магазина,руб', 'vsego_chekov_shop': 'Всего чеков магазин'
 }
     clean_df=pd.DataFrame(clean)
-    clean_df.groupby(['operDay', 'shop', 'goodsCode'])
+    
     key_collum_for_drop = [col for col in key_collum_for_drop if col in clean_df.columns]
     clean_df.drop(columns=key_collum_for_drop, inplace=True)
     # Rename columns
+    clean_df = clean_df[~clean_df['AdvertActExternalCode'].isin(['0'])]# Удаляем строки товара без акции
+
     clean_df.rename(columns=dictonary, inplace=True)
-    clean_df=clean_df.dropna(subset=['AdvertActExternalCode']).reset_index()
     print('Меняем местами столобцы для большего удобства')
     clean_df.to_excel('temp_of_format_finality.xlsx', index=False)
-    print('Итоговый файл: temp_of_format.xlsx')   
+    print('Итоговый файл: temp_of_format_finality.xlsx')   
     return clean_df
     
 def analitics_colums(analitic_df):
-   # sego_discount_item=('discountValue', 'sum') Считаем размер скидки на товар всего и среднюю цену товара. Учитываем что при isDiscountPurchase ==True размер скидки == стоимости товара!
-    # amount_itogo	discountAmount	fiscalDocNum	goodsCode	barCode	cost	discountValue	costWithDiscount	amount	isDiscountPurchase
-    # 89.5	18.53	83263;1	173016	46226907	24.66	9.52	19.9	39.8	ЛОЖЬ
-    # 89. 5	18.53	83263;1	111870	1E+12	58.71	9.01	49.7	49.7	ЛОЖЬ
-    # 89.5	18.53	83263;1	111870	1E+12	58.71	9.01	49.7	49.7	ИСТИНА - пример
-    # Загрузка данных
+
     # Удаление строк с определённой акцией
     df=pd.DataFrame(analitic_df)
-    df = df[df['AdvertActExternalCode_y'] != 'SR10_59320322']
+    df = df[df['AdvertActExternalCode'] != 'SR10_59320322']
     print("Убираем акции округления 50 копеек")
     # Ключевые поля для объединения
-    key_fields = ['operDay', 'shop', 'cash', 'shift', 'number', 'order', 'AdvertActExternalCode_y', 'goodsCode']
+    key_fields = ['operDay', 'shop', 'cash', 'shift', 'number', 'order',  'goodsCode']
 
     # Аналитика по каждому товару в акции
     sales_of_item = (
-        df.groupby(key_fields, as_index=False)
+        df.groupby(['operDay', 'shop', 'goodsCode'])
         .agg(
             sum_of_item=('amount', 'sum'),
-            vsego_chevok_item=('fiscalDocNum', 'count'),
+            vsego_chevok_item=('fiscalDocNum', 'nunique'),
             sum_discount_item=('discountValue', 'sum'),
             kolichesytvo_tovara=('quantity', 'sum')
         )
@@ -144,10 +143,10 @@ def analitics_colums(analitic_df):
 
     # Аналитика по чекам с акцией (без разделения по товарам)
     sales_of_discount = (
-        df.groupby(['operDay', 'shop', 'AdvertActExternalCode_y'], as_index=False)
+        df.groupby(['operDay', 'shop', 'AdvertActExternalCode'], as_index=False)
         .agg(
             sum_of_discount=('amount', 'sum'),
-            vsego_chekov_discount=('fiscalDocNum', 'count')
+            vsego_chekov_discount=('fiscalDocNum', 'nunique') #исправлено на лен. было не верное количество
         )
     )
 
@@ -157,13 +156,13 @@ def analitics_colums(analitic_df):
         .groupby(['shop', 'operDay'], as_index=False)
         .agg(
             sum_of_sale_shop=('amount_itogo', 'sum'),
-            vsego_chekov_shop=('fiscalDocNum', 'count')
+            vsego_chekov_shop=('fiscalDocNum', 'nunique')
         )
     )
 
     # Merge: объединяем всё обратно в исходный DataFrame
-    df = df.merge(sales_of_item, how='left', on=key_fields)
-    df = df.merge(sales_of_discount, how='left', on=['operDay', 'shop', 'AdvertActExternalCode_y'])
+    df = df.merge(sales_of_item, how='left', on=['operDay', 'shop', 'goodsCode'])
+    df = df.merge(sales_of_discount, how='left', on=['operDay', 'shop', 'AdvertActExternalCode'])
     df = df.merge(sales_of_shop, how='left', on=['shop', 'operDay'])
 
     # Заполняем NaN нулями
@@ -197,17 +196,17 @@ def analitics_colums(analitic_df):
     # Сохраняем результат
     # df.to_excel('temp_of_analitic.xlsx', index=False)
     # print('Итоговый файл: temp_of_analitic.xlsx')   
-    file_path = save_data_to_excel(df)
-    create_charts(df)
-# Добавляем графики как новый лист в Excel
-    from openpyxl import load_workbook
-    with pd.ExcelWriter(file_path, mode='a', engine='openpyxl', if_sheet_exists='overlay') as writer:
-        wb = writer.book
-        if 'Графики' not in wb.sheetnames:
-            wb.create_sheet('Графики')
+#     file_path = save_data_to_excel(df)
+#     create_charts(df)
+# # Добавляем графики как новый лист в Excel
+#     from openpyxl import load_workbook
+#     with pd.ExcelWriter(file_path, mode='a', engine='openpyxl', if_sheet_exists='overlay') as writer:
+#         wb = writer.book
+#         if 'Графики' not in wb.sheetnames:
+#             wb.create_sheet('Графики')
 
-        # TODO: если нужно — можно добавить графики программно
-        pass
+#         # TODO: если нужно — можно добавить графики программно
+#         pass
     return df
 # Указать обязательно информацию о количестве акций в данный период и количестве товара в акции
 
@@ -218,12 +217,16 @@ def create_charts(df, output_path='charts.xlsx'):
         worksheet = writer.book.create_sheet(title="Графики")
        
         print('Строим графики')
+        img_streams = []
         def add_chart(fig):
             img_data = BytesIO()
             fig.savefig(img_data, format='png', bbox_inches='tight')
+            img_data.seek(0)  # Важно сбросить позицию в начале потока
+            img_streams.append(img_data)
             img = XLImage(img_data)
             worksheet.add_image(img)
-
+                # Значение кода, которое нужно исключить (замените на ваше)
+        exclude_code = "SR10_1485"  # Например, код билета докупателя
         # 1. Доля товара в акции (в цене)
         plt.figure(figsize=(8, 5))
         item_share = df.groupby('goodsCode')['amount'].sum() / df.groupby('goodsCode')['cost'].sum()
@@ -235,25 +238,33 @@ def create_charts(df, output_path='charts.xlsx'):
 
         # 2. Доли акции в обороте (в цене)
         plt.figure(figsize=(8, 5))
-        sales_by_act = df.groupby('AdvertActExternalCode_y')['amount'].sum()
+        exclude_code = "SR10_1485"
+        df_1 = df[df['AdvertActExternalCode'] != exclude_code]
+        sales_by_act = df_1.groupby('AdvertActExternalCode')['amount'].sum()
         total_sales = sales_by_act.sum()
-        (sales_by_act / total_sales).sort_values(ascending=False).head(10).plot(kind='pie', autopct='%1.1f%%')
-        plt.title("Доли акции в обороте (в цене)")
+        (sales_by_act / total_sales).sort_values(ascending=False).head(15).plot(kind='pie', autopct='%1.1f%%')
+        plt.title("Доли акции в обороте (в цене) - без билета Докупателя")
         add_chart(plt.gcf())
         plt.close()
 
         # 3. Популярность акции (по количеству чеков)
+        exclude_code = "SR10_1485"
+        # Фильтруем DataFrame, исключая указанный код
+        filtered_df = df[df['AdvertActExternalCode'] != exclude_code]
+        # Строим график на отфильтрованных данных
         plt.figure(figsize=(8, 5))
-        popularity = df.groupby('AdvertActExternalCode_y')['fiscalDocNum'].nunique()
+        popularity = filtered_df.groupby('AdvertActExternalCode')['fiscalDocNum'].nunique()
         popularity.sort_values(ascending=False).head(10).plot(kind='barh', color='lightgreen')
-        plt.title("Популярность акции (по номеру)")
+        plt.title("Популярность акции (по номеру) - Исключая билет докупателя")
         plt.xlabel("Количество уникальных чеков")
         add_chart(plt.gcf())
         plt.close()
 
-        # 4. Сумма скидок по акциям
+        # 4. Сумма скидок по акциям4
+        exclude_code = "SR10_1485"
+        df_2 = df[df['AdvertActExternalCode'] != exclude_code]
         plt.figure(figsize=(8, 5))
-        discount_sum = df.groupby('AdvertActExternalCode_y')['discountValue'].sum()
+        discount_sum = df_2.groupby('AdvertActExternalCode')['discountValue'].sum()
         discount_sum.sort_values(ascending=False).head(10).plot(kind='bar', color='salmon')
         plt.title("Сумма скидок по акциям (руб.)")
         plt.ylabel("Сумма скидок")
@@ -261,14 +272,14 @@ def create_charts(df, output_path='charts.xlsx'):
         plt.close()
 
         # Обновляем позиции графиков
-        writer._save()
+        # writer._save()
 
 # === Функция сохранения данных в Excel с разбивкой по магазинам ===
 def save_data_to_excel(df, filename='output_data.xlsx'):
     print('Сохраняем данные в один файл.')
     print('Структуритуем по листам.')
     
-    with pd.ExcelWriter(filename, engine='openpyxl') as writer:
+    with pd.ExcelWriter(filename, engine='openpyxl', mode='w') as writer:
         # Лист 1: Все магазины
         df.to_excel(writer, sheet_name='Все магазины', index=False)
 
@@ -292,9 +303,13 @@ def main():
 
     print("\n=== Шаг 3: Очистка и форматирование данных ===")
     df_cleaned_final = clean_df(analiz_df)
-
+    
     print("\n=== Шаг 4: Построение графиков ===")
-    create_charts(df_cleaned_final)
+    create_charts(analiz_df)
+
+
+ 
+
 
     print("\n✅ Все этапы выполнены успешно!")
 
@@ -305,38 +320,38 @@ main()
 
 
 
-# # === Функция отправки файла в Google Sheets ===
-# def upload_to_google_sheets(file_path, sheet_name='Аналитика'):
-#     scope = ["https://spreadsheets.google.com/feeds ", "https://www.googleapis.com/auth/drive "]
-#     creds = Credentials.from_service_account_file('service_account.json', scopes=scope)
-#     client = gspread.authorize(creds)
+# === Функция отправки файла в Google Sheets ===
+def upload_to_google_sheets(file_path, sheet_name='Аналитика'):
+    scope = ["https://spreadsheets.google.com/feeds ", "https://www.googleapis.com/auth/drive "]
+    creds = Credentials.from_service_account_file('service_account.json', scopes=scope)
+    client = gspread.authorize(creds)
 
-#     try:
-#         sh = client.open(sheet_name)
-#     except gspread.exceptions.SpreadsheetNotFound:
-#         sh = client.create(sheet_name)
+    try:
+        sh = client.open(sheet_name)
+    except gspread.exceptions.SpreadsheetNotFound:
+        sh = client.create(sheet_name)
 
-#     # Открываем первый лист и очищаем его
-#     worksheet = sh.sheet1
-#     worksheet.clear()
+    # Открываем первый лист и очищаем его
+    worksheet = sh.sheet1
+    worksheet.clear()
 
-#     # Загружаем данные из Excel
-#     df_all = pd.read_excel(file_path, sheet_name='Все магазины')
-#     data = [df_all.columns.values.tolist()] + df_all.values.tolist()
-#     worksheet.update(data)
+    # Загружаем данные из Excel
+    df_all = pd.read_excel(file_path, sheet_name='Все магазины')
+    data = [df_all.columns.values.tolist()] + df_all.values.tolist()
+    worksheet.update(data)
 
-#     # Добавляем листы по магазинам
-#     xls = pd.ExcelFile(file_path)
-#     for sheet in xls.sheet_names:
-#         if sheet != "Все магазины" and sheet != "Графики":
-#             try:
-#                 ws = sh.add_worksheet(title=sheet, rows="1000", cols="20")
-#             except gspread.exceptions.APIError:
-#                 ws = sh.worksheet(sheet)
-#             df = pd.read_excel(file_path, sheet_name=sheet)
-#             data = [df.columns.values.tolist()] + df.values.tolist()
-#             ws.update(data)
+    # Добавляем листы по магазинам
+    xls = pd.ExcelFile(file_path)
+    for sheet in xls.sheet_names:
+        if sheet != "Все магазины" and sheet != "Графики":
+            try:
+                ws = sh.add_worksheet(title=sheet, rows="1000", cols="20")
+            except gspread.exceptions.APIError:
+                ws = sh.worksheet(sheet)
+            df = pd.read_excel(file_path, sheet_name=sheet)
+            data = [df.columns.values.tolist()] + df.values.tolist()
+            ws.update(data)
 
-#     print(f"Файл загружен в Google Sheets: {sh.url}")
+    print(f"Файл загружен в Google Sheets: {sh.url}")
 
-# # === Основная функция аналитики ===
+# === Основная функция аналитики ===
