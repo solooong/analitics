@@ -1,0 +1,14 @@
+1. Группируем PROJID,TODATE, FROMDATE,ITEMBUYERGROUPID,SALECHANELID,PROJGROUPID по JOURNALID, ITEMNAME
+2. Находим ITEMNAME уникальный , Выводим DESCRIPTION + NAME17!=Nun (если значение ==н+1) иначе "предыдущая цена RETAILDISCPRICE) , QTYLOWEST, если есть QTYHIGHEST, VALUE. 
+
+
+3.первая страница отображения проекты PROJID (HTML)
+Тип акции(PROJGROUPID), Период действия с FROMDATE до TODATE. Группа товаров - ITEMBUYERGROUPID, КАнал реализации - SALECHANELID
+Так же отображаем Осталось дней до начала акции, продолжительность акции, день недели старта акции, Количество товара акции сумма -(ITEMNAME уникальный )
+
+4. При открытии проекта
+Дата начала - FROMDATE3, день недели, наименование товара - ITEMNAME, если есть минимальное количество - QTYLOWEST, если есть максимальное количетсво QTYHIGHEST , тип акции DESCRIPTION , цена акции, предыдущая цена (если значение ==н+1 - DESCRIPTION , иначе RETAILDISCPRICE)   , место размещения - PROMOPLACEID35 (все значения по ITEMNAME)
+
+3. 
+
+Структура Краткая информация по проекту -> Период действия -> КМ

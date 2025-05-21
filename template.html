@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Аналитика</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        h1, h2 { text-align: center; color: #2c3e50; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+        th, td { border: 1px solid black; padding: 8px; text-align: left; }
+        img { max-width: 100%; height: auto; display: block; margin: 20px auto; }
+    </style>
+</head>
+<body>
+
+<h1>Аналитика продаж и акций</h1>
+<p style="text-align:center;">Дата: {{ date }}</p>
+
+<h2>Свод по акциям</h2>
+{{ promo_table }}
+
+<h2>Свод по товарам</h2>
+{{ product_table }}
+
+<h2>Графики</h2>
+{% for chart in charts %}
+<img src="{{ chart }}" />
+{% endfor %}
+
+</body>
+</html>
